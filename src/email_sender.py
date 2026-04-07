@@ -194,9 +194,22 @@ def enviar_reporte(reporte_tendencias, conceptos_ia):
     html_content = construir_html(reporte_tendencias, conceptos_ia)
     msg.attach(MIMEText(html_content, "html"))
 
+    # Quitar espacios de la contraseña de app (por si se cargó con espacios)
+    gmail_app_password = gmail_app_password.replace(" ", "")
+
     print(f"Enviando reporte a {destinatario}...")
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-        server.login(gmail_user, gmail_app_password)
-        server.sendmail(gmail_user, destinatario, msg.as_string())
+    try:
+        # Intentar primero con STARTTLS (puerto 587)
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(gmail_user, gmail_app_password)
+            server.sendmail(gmail_user, destinatario, msg.as_string())
+    except Exception:
+        # Fallback con SSL (puerto 465)
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(gmail_user, gmail_app_password)
+            server.sendmail(gmail_user, destinatario, msg.as_string())
 
     print("Email enviado correctamente.")

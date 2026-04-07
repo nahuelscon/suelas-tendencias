@@ -6,22 +6,15 @@ recomendaciones de diseño de suelas basadas en tendencias.
 
 import os
 import requests
-import json
 
 
-HF_API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.3"
+# Modelos gratuitos disponibles en HuggingFace Inference API
+HF_API_URL = "https://api-inference.huggingface.co/models/HuggingFaceH4/zephyr-7b-beta"
 
 
-def llamar_ia(prompt, max_tokens=800):
+def llamar_ia(prompt, max_tokens=600):
     """
     Llama a la API gratuita de Hugging Face.
-
-    Args:
-        prompt: texto de instrucción para el modelo
-        max_tokens: máximo de tokens en la respuesta
-
-    Returns:
-        texto generado por la IA
     """
     hf_token = os.environ.get("HF_TOKEN")
     if not hf_token:
@@ -34,18 +27,14 @@ def llamar_ia(prompt, max_tokens=800):
             "max_new_tokens": max_tokens,
             "temperature": 0.7,
             "return_full_text": False,
+            "do_sample": True,
         },
+        "options": {
+            "wait_for_model": True,
+        }
     }
 
-    response = requests.post(HF_API_URL, headers=headers, json=payload, timeout=60)
-
-    if response.status_code == 503:
-        # Modelo cargando, reintentar
-        import time
-        print("Modelo cargando, esperando 20 segundos...")
-        time.sleep(20)
-        response = requests.post(HF_API_URL, headers=headers, json=payload, timeout=60)
-
+    response = requests.post(HF_API_URL, headers=headers, json=payload, timeout=90)
     response.raise_for_status()
     result = response.json()
 
@@ -58,80 +47,64 @@ def llamar_ia(prompt, max_tokens=800):
 def generar_concepto_suela(tendencias, temporada):
     """
     Genera un concepto de diseño de suela basado en las tendencias.
-
-    Args:
-        tendencias: dict con datos de tendencias de Google Trends
-        temporada: string con la temporada actual
-
-    Returns:
-        dict con concepto de suela para dama y niño
     """
+    contexto = tendencias.get("contexto_moda", {})
+    estilos_dama = ", ".join(contexto.get("estilos_dama", [])[:3])
+    estilos_nino = ", ".join(contexto.get("estilos_nino", [])[:2])
+    colores = ", ".join(contexto.get("colores", [])[:3])
+    materiales = ", ".join(contexto.get("materiales", [])[:2])
+    tendencias_globales = " | ".join(contexto.get("tendencias_globales", [])[:3])
+    emergentes = ", ".join(tendencias.get("emergentes", [])[:3])
 
-    # Extraer los términos más relevantes
-    terminos_dama = sorted(
-        tendencias.get("tendencias_dama", {}).items(),
-        key=lambda x: x[1]["ultimo_valor"],
-        reverse=True
-    )[:3]
+    prompt = f"""<|system|>
+Eres un experto en diseño de calzado y suelas para una fábrica argentina. Respondés siempre en español, de forma técnica y concisa.</s>
+<|user|>
+Temporada actual en Argentina: {temporada}
+Estilos dama en tendencia: {estilos_dama}
+Estilos niño en tendencia: {estilos_nino}
+Colores de temporada: {colores}
+Materiales sugeridos: {materiales}
+Tendencias globales: {tendencias_globales}
+Búsquedas emergentes: {emergentes}
 
-    terminos_nino = sorted(
-        tendencias.get("tendencias_nino", {}).items(),
-        key=lambda x: x[1]["ultimo_valor"],
-        reverse=True
-    )[:2]
-
-    emergentes = tendencias.get("emergentes", [])[:3]
-
-    # Formatear términos para el prompt
-    top_dama = ", ".join([t[0] for t in terminos_dama]) if terminos_dama else "calzado de moda"
-    top_nino = ", ".join([t[0] for t in terminos_nino]) if terminos_nino else "calzado infantil"
-    top_emergentes = ", ".join(emergentes) if emergentes else "ninguno destacado"
-
-    prompt = f"""<s>[INST] Eres un experto en diseño de calzado y suelas para una fábrica argentina.
-Basándote en las siguientes tendencias actuales de búsqueda en Argentina para la temporada {temporada}:
-
-TENDENCIAS DAMA MÁS BUSCADAS: {top_dama}
-TENDENCIAS NIÑO MÁS BUSCADAS: {top_nino}
-TÉRMINOS EMERGENTES: {top_emergentes}
-
-Genera en español un reporte de diseño de suelas con este formato exacto:
+Generá un reporte de diseño de suelas con este formato:
 
 ## CONCEPTO DE SUELA DAMA
-**Estilo:** [nombre del estilo]
-**Tipo de suela:** [descripción del tipo: plataforma / taco stiletto / cuña / plana / etc.]
-**Altura:** [altura aproximada en cm]
-**Forma de punta:** [redonda / cuadrada / almendrada / punta fina]
-**Material sugerido:** [goma / PVC / cuero / TR / EVA]
-**Textura:** [lisa / estriada / antideslizante / diseño geométrico]
-**Colores tendencia:** [2 o 3 colores]
-**Justificación:** [1 oración explicando por qué este diseño responde a las tendencias]
+**Estilo:** [nombre]
+**Tipo:** [plataforma / taco cuadrado / cuña / plana / etc]
+**Altura:** [cm]
+**Punta:** [redonda / cuadrada / almendrada]
+**Material:** [tipo]
+**Textura:** [descripción]
+**Colores:** [2 colores]
+**Por qué:** [1 oración]
 
 ## CONCEPTO DE SUELA NIÑO
-**Estilo:** [nombre del estilo]
-**Tipo de suela:** [descripción]
-**Altura:** [altura aproximada en cm]
-**Forma de punta:** [tipo de punta]
-**Material sugerido:** [material]
-**Textura:** [descripción de textura]
-**Colores tendencia:** [2 o 3 colores]
-**Justificación:** [1 oración explicando por qué este diseño responde a las tendencias]
+**Estilo:** [nombre]
+**Tipo:** [descripción]
+**Altura:** [cm]
+**Punta:** [tipo]
+**Material:** [tipo]
+**Textura:** [descripción]
+**Colores:** [2 colores]
+**Por qué:** [1 oración]
 
-## ALERTA DE TENDENCIA EMERGENTE
-[1 párrafo describiendo qué estilo nuevo está apareciendo y qué tipo de suela necesitaría]
-[/INST]"""
+## ALERTA EMERGENTE
+[1 párrafo breve sobre qué estilo nuevo está apareciendo]</s>
+<|assistant|>"""
 
     try:
         print("Generando concepto de suela con IA...")
         concepto = llamar_ia(prompt)
         return {
             "concepto_dama": extraer_seccion(concepto, "CONCEPTO DE SUELA DAMA", "CONCEPTO DE SUELA NIÑO"),
-            "concepto_nino": extraer_seccion(concepto, "CONCEPTO DE SUELA NIÑO", "ALERTA DE TENDENCIA EMERGENTE"),
-            "alerta_emergente": extraer_seccion(concepto, "ALERTA DE TENDENCIA EMERGENTE", None),
+            "concepto_nino": extraer_seccion(concepto, "CONCEPTO DE SUELA NIÑO", "ALERTA EMERGENTE"),
+            "alerta_emergente": extraer_seccion(concepto, "ALERTA EMERGENTE", None),
             "texto_completo": concepto,
         }
     except Exception as e:
         print(f"Error en IA: {e}")
-        return generar_concepto_fallback(temporada, top_dama, top_nino)
+        return generar_concepto_fallback(temporada, estilos_dama, estilos_nino)
 
 
 def extraer_seccion(texto, inicio, fin):
@@ -155,55 +128,59 @@ def extraer_seccion(texto, inicio, fin):
         return texto
 
 
-def generar_concepto_fallback(temporada, top_dama, top_nino):
-    """
-    Genera un concepto básico sin IA en caso de error.
-    Útil como respaldo cuando la API no está disponible.
-    """
+def generar_concepto_fallback(temporada, estilos_dama="", estilos_nino=""):
+    """Genera un concepto de respaldo sin IA."""
     if temporada in ["verano", "primavera"]:
         concepto_dama = """## CONCEPTO DE SUELA DAMA
 **Estilo:** Sandalia plataforma verano
-**Tipo de suela:** Plataforma
+**Tipo:** Plataforma
 **Altura:** 5-7 cm
-**Forma de punta:** Abierta / destalonada
-**Material sugerido:** EVA / TR
+**Punta:** Abierta / destalonada
+**Material:** EVA / TR
 **Textura:** Lisa con diseño geométrico lateral
-**Colores tendencia:** Beige, blanco, terracota
-**Justificación:** Las búsquedas indican alta demanda de sandalias con altura para la temporada."""
+**Colores:** Beige, terracota
+**Por qué:** Las búsquedas de sandalias con altura dominan la temporada en Argentina."""
 
         concepto_nino = """## CONCEPTO DE SUELA NIÑO
 **Estilo:** Sandalia infantil sport
-**Tipo de suela:** Plana flexible
+**Tipo:** Plana flexible
 **Altura:** 1-2 cm
-**Forma de punta:** Redonda
-**Material sugerido:** TR antideslizante
-**Textura:** Estriada con motivos de colores
-**Colores tendencia:** Rosa, lila, turquesa
-**Justificación:** Alta búsqueda de calzado infantil cómodo y colorido para verano."""
+**Punta:** Redonda
+**Material:** TR antideslizante
+**Textura:** Estriada multicolor
+**Colores:** Rosa, turquesa
+**Por qué:** Alta búsqueda de calzado infantil cómodo y colorido para verano."""
+
+        alerta = """## ALERTA EMERGENTE
+Las ojotas y sandalias de tiras minimalistas están ganando terreno rápidamente esta temporada, con suelas ultrafinas de EVA de 1-2cm en colores neutros y traslúcidos."""
+
     else:
         concepto_dama = """## CONCEPTO DE SUELA DAMA
 **Estilo:** Botín urbano invierno
-**Tipo de suela:** Taco cuadrado bajo
+**Tipo:** Taco cuadrado bajo
 **Altura:** 3-4 cm
-**Forma de punta:** Cuadrada
-**Material sugerido:** TR / goma
+**Punta:** Cuadrada
+**Material:** TR / goma
 **Textura:** Antideslizante estriada
-**Colores tendencia:** Negro, marrón, bordeaux
-**Justificación:** Las búsquedas de botines y borcegos lideran las tendencias de invierno."""
+**Colores:** Negro, bordeaux
+**Por qué:** Los botines y borcegos lideran las búsquedas de calzado de invierno."""
 
         concepto_nino = """## CONCEPTO DE SUELA NIÑO
 **Estilo:** Bota infantil impermeable
-**Tipo de suela:** Plana gruesa
+**Tipo:** Plana gruesa
 **Altura:** 2-3 cm
-**Forma de punta:** Redonda
-**Material sugerido:** PVC / EVA
+**Punta:** Redonda
+**Material:** PVC / EVA
 **Textura:** Antideslizante con relieve
-**Colores tendencia:** Negro, azul marino, verde militar
-**Justificación:** Alta demanda de calzado abrigado y resistente para niños en invierno."""
+**Colores:** Negro, azul marino
+**Por qué:** Alta demanda de calzado abrigado y resistente para niños en invierno."""
+
+        alerta = f"""## ALERTA EMERGENTE
+Los borcegos con suela gruesa tipo work boot están emergiendo con fuerza esta temporada. Se busca suela de TR bicolor (negro con detalle en color) de 3-4cm, con textura marcada y punta ligeramente cuadrada."""
 
     return {
         "concepto_dama": concepto_dama,
         "concepto_nino": concepto_nino,
-        "alerta_emergente": f"## ALERTA DE TENDENCIA EMERGENTE\nSe detectan búsquedas crecientes relacionadas a: {top_dama}. Monitorear la próxima semana.",
-        "texto_completo": f"{concepto_dama}\n\n{concepto_nino}",
+        "alerta_emergente": alerta,
+        "texto_completo": f"{concepto_dama}\n\n{concepto_nino}\n\n{alerta}",
     }
