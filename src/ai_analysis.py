@@ -1,182 +1,132 @@
 """
-Módulo de análisis con IA.
-Usa Hugging Face Inference API (gratuita) para generar
-recomendaciones de diseño de suelas basadas en tendencias.
+Módulo de generación de conceptos de suela.
+Genera reportes de diseño inteligentes basados en los datos de temporada.
+No depende de APIs externas de IA para mayor confiabilidad.
 """
 
 import os
 import requests
+from datetime import datetime
 
 
-# Modelos gratuitos disponibles en HuggingFace Inference API
-HF_API_URL = "https://api-inference.huggingface.co/models/HuggingFaceH4/zephyr-7b-beta"
+# Modelos gratuitos a intentar en orden
+HF_MODELOS = [
+    "google/flan-t5-large",
+    "google/flan-t5-base",
+]
 
 
-def llamar_ia(prompt, max_tokens=600):
+def intentar_ia_huggingface(prompt_simple, temporada, contexto):
     """
-    Llama a la API gratuita de Hugging Face.
+    Intenta usar HuggingFace como mejora opcional.
+    Si falla, retorna None y se usa el generador local.
     """
-    hf_token = os.environ.get("HF_TOKEN")
+    hf_token = os.environ.get("HF_TOKEN", "")
     if not hf_token:
-        raise ValueError("Falta la variable de entorno HF_TOKEN")
+        return None
 
     headers = {"Authorization": f"Bearer {hf_token}"}
-    payload = {
-        "inputs": prompt,
-        "parameters": {
-            "max_new_tokens": max_tokens,
-            "temperature": 0.7,
-            "return_full_text": False,
-            "do_sample": True,
-        },
-        "options": {
-            "wait_for_model": True,
-        }
-    }
 
-    response = requests.post(HF_API_URL, headers=headers, json=payload, timeout=90)
-    response.raise_for_status()
-    result = response.json()
+    for modelo in HF_MODELOS:
+        try:
+            url = f"https://api-inference.huggingface.co/models/{modelo}"
+            payload = {
+                "inputs": prompt_simple,
+                "parameters": {"max_new_tokens": 200},
+                "options": {"wait_for_model": True}
+            }
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            if response.status_code == 200:
+                result = response.json()
+                if isinstance(result, list) and result:
+                    texto = result[0].get("generated_text", "").strip()
+                    if texto and len(texto) > 20:
+                        return texto
+        except Exception:
+            continue
 
-    if isinstance(result, list) and len(result) > 0:
-        return result[0].get("generated_text", "").strip()
-
-    return str(result)
+    return None
 
 
 def generar_concepto_suela(tendencias, temporada):
     """
-    Genera un concepto de diseño de suela basado en las tendencias.
+    Genera el concepto de suela basado en tendencias y temporada.
+    Usa lógica inteligente local sin depender de APIs externas.
     """
     contexto = tendencias.get("contexto_moda", {})
-    estilos_dama = ", ".join(contexto.get("estilos_dama", [])[:3])
-    estilos_nino = ", ".join(contexto.get("estilos_nino", [])[:2])
-    colores = ", ".join(contexto.get("colores", [])[:3])
-    materiales = ", ".join(contexto.get("materiales", [])[:2])
-    tendencias_globales = " | ".join(contexto.get("tendencias_globales", [])[:3])
-    emergentes = ", ".join(tendencias.get("emergentes", [])[:3])
 
-    prompt = f"""<|system|>
-Eres un experto en diseño de calzado y suelas para una fábrica argentina. Respondés siempre en español, de forma técnica y concisa.</s>
-<|user|>
-Temporada actual en Argentina: {temporada}
-Estilos dama en tendencia: {estilos_dama}
-Estilos niño en tendencia: {estilos_nino}
-Colores de temporada: {colores}
-Materiales sugeridos: {materiales}
-Tendencias globales: {tendencias_globales}
-Búsquedas emergentes: {emergentes}
+    estilos_dama = contexto.get("estilos_dama", [])
+    estilos_nino = contexto.get("estilos_nino", [])
+    colores = contexto.get("colores", [])
+    materiales = contexto.get("materiales", [])
+    novedades = contexto.get("novedades", [])
+    tendencias_globales = contexto.get("tendencias_globales", [])
+    emergentes = tendencias.get("emergentes", [])
 
-Generá un reporte de diseño de suelas con este formato:
+    # Datos del concepto dama (top 1 estilo de temporada)
+    estilo_dama = estilos_dama[0] if estilos_dama else "botín clásico"
+    estilo_dama_2 = estilos_dama[1] if len(estilos_dama) > 1 else estilo_dama
+    color_1 = colores[0] if colores else "negro"
+    color_2 = colores[1] if len(colores) > 1 else "marrón"
+    material_1 = materiales[0] if materiales else "TR"
+    material_2 = materiales[1] if len(materiales) > 1 else "goma"
 
-## CONCEPTO DE SUELA DAMA
-**Estilo:** [nombre]
-**Tipo:** [plataforma / taco cuadrado / cuña / plana / etc]
-**Altura:** [cm]
-**Punta:** [redonda / cuadrada / almendrada]
-**Material:** [tipo]
-**Textura:** [descripción]
-**Colores:** [2 colores]
-**Por qué:** [1 oración]
+    # Datos del concepto niño
+    estilo_nino = estilos_nino[0] if estilos_nino else "calzado escolar"
+    color_nino_1 = colores[2] if len(colores) > 2 else colores[0] if colores else "negro"
+    color_nino_2 = colores[3] if len(colores) > 3 else colores[1] if len(colores) > 1 else "blanco"
 
-## CONCEPTO DE SUELA NIÑO
-**Estilo:** [nombre]
-**Tipo:** [descripción]
-**Altura:** [cm]
-**Punta:** [tipo]
-**Material:** [tipo]
-**Textura:** [descripción]
-**Colores:** [2 colores]
-**Por qué:** [1 oración]
-
-## ALERTA EMERGENTE
-[1 párrafo breve sobre qué estilo nuevo está apareciendo]</s>
-<|assistant|>"""
-
-    try:
-        print("Generando concepto de suela con IA...")
-        concepto = llamar_ia(prompt)
-        return {
-            "concepto_dama": extraer_seccion(concepto, "CONCEPTO DE SUELA DAMA", "CONCEPTO DE SUELA NIÑO"),
-            "concepto_nino": extraer_seccion(concepto, "CONCEPTO DE SUELA NIÑO", "ALERTA EMERGENTE"),
-            "alerta_emergente": extraer_seccion(concepto, "ALERTA EMERGENTE", None),
-            "texto_completo": concepto,
-        }
-    except Exception as e:
-        print(f"Error en IA: {e}")
-        return generar_concepto_fallback(temporada, estilos_dama, estilos_nino)
-
-
-def extraer_seccion(texto, inicio, fin):
-    """Extrae una sección del texto entre dos encabezados."""
-    try:
-        idx_inicio = texto.find(f"## {inicio}")
-        if idx_inicio == -1:
-            idx_inicio = texto.find(inicio)
-        if idx_inicio == -1:
-            return texto
-
-        if fin:
-            idx_fin = texto.find(f"## {fin}")
-            if idx_fin == -1:
-                idx_fin = texto.find(fin)
-            if idx_fin != -1:
-                return texto[idx_inicio:idx_fin].strip()
-
-        return texto[idx_inicio:].strip()
-    except Exception:
-        return texto
-
-
-def generar_concepto_fallback(temporada, estilos_dama="", estilos_nino=""):
-    """Genera un concepto de respaldo sin IA."""
+    # Definir características según temporada
     if temporada in ["verano", "primavera"]:
-        concepto_dama = """## CONCEPTO DE SUELA DAMA
-**Estilo:** Sandalia plataforma verano
-**Tipo:** Plataforma
-**Altura:** 5-7 cm
-**Punta:** Abierta / destalonada
-**Material:** EVA / TR
-**Textura:** Lisa con diseño geométrico lateral
-**Colores:** Beige, terracota
-**Por qué:** Las búsquedas de sandalias con altura dominan la temporada en Argentina."""
-
-        concepto_nino = """## CONCEPTO DE SUELA NIÑO
-**Estilo:** Sandalia infantil sport
-**Tipo:** Plana flexible
-**Altura:** 1-2 cm
-**Punta:** Redonda
-**Material:** TR antideslizante
-**Textura:** Estriada multicolor
-**Colores:** Rosa, turquesa
-**Por qué:** Alta búsqueda de calzado infantil cómodo y colorido para verano."""
-
-        alerta = """## ALERTA EMERGENTE
-Las ojotas y sandalias de tiras minimalistas están ganando terreno rápidamente esta temporada, con suelas ultrafinas de EVA de 1-2cm en colores neutros y traslúcidos."""
-
+        tipo_dama = "Plataforma" if "plataforma" in estilo_dama else "Suela plana"
+        altura_dama = "5-7 cm" if "plataforma" in estilo_dama else "1-2 cm"
+        punta_dama = "Cuadrada" if temporada == "verano" else "Almendrada"
+        textura_dama = "Lisa con ranuras laterales decorativas"
+        tipo_nino = "Plana flexible antideslizante"
+        altura_nino = "1.5 cm"
+        punta_nino = "Redonda"
+        textura_nino = "Estriada transversal en colores"
     else:
-        concepto_dama = """## CONCEPTO DE SUELA DAMA
-**Estilo:** Botín urbano invierno
-**Tipo:** Taco cuadrado bajo
-**Altura:** 3-4 cm
-**Punta:** Cuadrada
-**Material:** TR / goma
-**Textura:** Antideslizante estriada
-**Colores:** Negro, bordeaux
-**Por qué:** Los botines y borcegos lideran las búsquedas de calzado de invierno."""
+        tipo_dama = "Taco cuadrado bajo" if "botín" in estilo_dama or "bota" in estilo_dama else "Plataforma track"
+        altura_dama = "3-4 cm" if "botín" in estilo_dama else "4-5 cm"
+        punta_dama = "Cuadrada"
+        textura_dama = "Antideslizante con relieve geométrico profundo"
+        tipo_nino = "Plana gruesa impermeable"
+        altura_nino = "2-3 cm"
+        punta_nino = "Redonda"
+        textura_nino = "Antideslizante con relieve profundo"
 
-        concepto_nino = """## CONCEPTO DE SUELA NIÑO
-**Estilo:** Bota infantil impermeable
-**Tipo:** Plana gruesa
-**Altura:** 2-3 cm
-**Punta:** Redonda
-**Material:** PVC / EVA
-**Textura:** Antideslizante con relieve
-**Colores:** Negro, azul marino
-**Por qué:** Alta demanda de calzado abrigado y resistente para niños en invierno."""
+    # Armar concepto dama
+    concepto_dama = f"""## CONCEPTO DE SUELA DAMA
+**Estilo:** {estilo_dama.capitalize()}
+**Tipo de suela:** {tipo_dama}
+**Altura:** {altura_dama}
+**Forma de punta:** {punta_dama}
+**Material sugerido:** {material_1} + {material_2}
+**Textura:** {textura_dama}
+**Colores tendencia:** {color_1.capitalize()}, {color_2.capitalize()}
+**Justificación:** El {estilo_dama} lidera las búsquedas de temporada {temporada} en Argentina, con tendencia hacia {tendencias_globales[0].lower() if tendencias_globales else 'mayor comodidad y estilo'}."""
 
-        alerta = f"""## ALERTA EMERGENTE
-Los borcegos con suela gruesa tipo work boot están emergiendo con fuerza esta temporada. Se busca suela de TR bicolor (negro con detalle en color) de 3-4cm, con textura marcada y punta ligeramente cuadrada."""
+    # Armar concepto niño
+    concepto_nino = f"""## CONCEPTO DE SUELA NIÑO/NIÑA
+**Estilo:** {estilo_nino.capitalize()}
+**Tipo de suela:** {tipo_nino}
+**Altura:** {altura_nino}
+**Forma de punta:** {punta_nino}
+**Material sugerido:** {material_1}
+**Textura:** {textura_nino}
+**Colores tendencia:** {color_nino_1.capitalize()}, {color_nino_2.capitalize()}
+**Justificación:** Alta demanda de {estilo_nino} para la temporada {temporada}, priorizando durabilidad y seguridad antideslizante."""
+
+    # Alerta emergente
+    novedad_1 = novedades[0] if novedades else emergentes[0] if emergentes else "nuevos estilos en desarrollo"
+    novedad_2 = novedades[1] if len(novedades) > 1 else ""
+    emergente_extra = f" También se observa: {emergentes[0]}." if emergentes and emergentes[0] not in novedad_1 else ""
+
+    alerta = f"""## ALERTA DE TENDENCIA EMERGENTE
+Esta semana se detecta crecimiento en: **{novedad_1}**. {f'Además: {novedad_2}.' if novedad_2 else ''}{emergente_extra}
+
+Tendencia global a monitorear: *{tendencias_globales[-1] if tendencias_globales else 'nuevas combinaciones de materiales'}*."""
 
     return {
         "concepto_dama": concepto_dama,

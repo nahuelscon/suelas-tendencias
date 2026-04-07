@@ -1,6 +1,6 @@
 """
 Módulo de tendencias de calzado.
-Usa el RSS de Google Trends Argentina + scraping de términos de moda.
+Usa RSS de Google Trending + base de conocimiento por temporada.
 """
 
 import requests
@@ -8,16 +8,10 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 
 
-# Términos de calzado para buscar en tendencias generales
 TERMINOS_CALZADO = [
     "sandalias", "zapatos", "botas", "botines", "borcegos",
     "zapatillas", "plataforma", "taco", "cuña", "mocasines",
-    "calzado", "suela", "chinelas", "ojotas"
-]
-
-TERMINOS_NINO = [
-    "zapatillas nena", "calzado infantil", "sandalias niña",
-    "botines niña", "zapatos niño"
+    "calzado", "suela", "chinelas", "ojotas", "alpargatas"
 ]
 
 
@@ -34,124 +28,169 @@ def obtener_temporada_actual():
         return "primavera"
 
 
-def obtener_tendencias_rss_argentina():
+def obtener_tendencias_rss():
     """
-    Obtiene las búsquedas más populares del día en Argentina
-    usando el RSS público de Google Trends (sin API key, sin bloqueos).
+    Intenta obtener tendencias del RSS de Google Trending (Argentina).
+    Prueba múltiples URLs posibles.
     """
-    url = "https://trends.google.com/trends/trendingsearches/daily/rss?geo=AR"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; TrendBot/1.0)"
-    }
+    urls_a_probar = [
+        "https://trends.google.com/trending/rss?geo=AR",
+        "https://trends.google.com/trends/trendingsearches/daily/rss?geo=AR&hl=es",
+        "https://trends.google.com/trends/trendingsearches/realtime/rss?geo=AR",
+    ]
+    headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"}
 
-    try:
-        response = requests.get(url, headers=headers, timeout=15)
-        response.raise_for_status()
+    for url in urls_a_probar:
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
+            if response.status_code == 200:
+                root = ET.fromstring(response.content)
+                items = root.findall(".//item")
+                tendencias = []
+                for item in items[:15]:
+                    titulo = item.findtext("title", "").strip()
+                    if titulo:
+                        tendencias.append(titulo)
+                if tendencias:
+                    print(f"RSS obtenido de: {url}")
+                    return tendencias
+        except Exception as e:
+            print(f"RSS falló ({url}): {e}")
+            continue
 
-        root = ET.fromstring(response.content)
-        items = root.findall(".//item")
-
-        tendencias = []
-        for item in items[:20]:  # Top 20 búsquedas del día
-            titulo = item.findtext("title", "").strip()
-            trafico = item.findtext(
-                "{https://trends.google.com/trends/trendingsearches/daily}approx_traffic", ""
-            ).strip()
-            tendencias.append({
-                "titulo": titulo,
-                "trafico": trafico
-            })
-
-        return tendencias
-    except Exception as e:
-        print(f"Error obteniendo RSS de Google Trends: {e}")
-        return []
-
-
-def filtrar_tendencias_calzado(todas_las_tendencias):
-    """
-    Filtra las tendencias generales buscando términos relacionados
-    con calzado, moda y temporada.
-    """
-    encontradas = []
-    for t in todas_las_tendencias:
-        titulo_lower = t["titulo"].lower()
-        for termino in TERMINOS_CALZADO:
-            if termino in titulo_lower:
-                encontradas.append(t)
-                break
-    return encontradas
+    print("RSS no disponible, usando datos de temporada.")
+    return []
 
 
 def obtener_contexto_moda_temporada(temporada):
     """
-    Devuelve contexto de tendencias de moda según temporada actual.
-    Este contexto ayuda a la IA a generar conceptos relevantes.
+    Base de conocimiento de tendencias por temporada para Argentina.
+    Se actualiza acá manualmente cada temporada si hace falta.
     """
-    tendencias_por_temporada = {
+    datos = {
         "verano": {
-            "estilos_dama": ["sandalia plataforma", "mule destalonado", "esclava rastrera", "cuña esparto", "sandalia tiras"],
-            "estilos_nino": ["sandalia sport", "ojotas con velcro", "sandalia cerrada"],
+            "estilos_dama": [
+                "sandalia plataforma EVA",
+                "mule destalonado taco fino",
+                "sandalia tiras cruzadas",
+                "cuña esparto",
+                "rastrera esclava",
+            ],
+            "estilos_nino": [
+                "sandalia sport con velcro",
+                "ojota liviana bicolor",
+                "sandalia cerrada escolar",
+            ],
             "materiales": ["EVA liviano", "corcho natural", "PVC transparente", "yute"],
-            "colores": ["blanco óptico", "terracota", "celeste", "rosa palo", "verde menta"],
+            "colores": ["blanco óptico", "terracota", "celeste pastel", "rosa palo", "verde menta"],
             "tendencias_globales": [
-                "Plataformas de 5cm a 8cm dominan la temporada",
+                "Plataformas de 5 a 8 cm dominan vidriera",
                 "Sandalias con tiras cruzadas muy solicitadas",
                 "Colores neutros y naturales lideran",
                 "Suela de corcho o EVA para comodidad",
-                "Puntas cuadradas siguen en tendencia"
+                "Puntas cuadradas siguen en tendencia",
+                "Transparencias en PVC para sandalias de noche",
+            ],
+            "novedades": [
+                "Sandalia con tira única gruesa al tobillo",
+                "Plataforma de madera natural efecto rústico",
+                "Suela bicolor blanco + color pastel",
             ]
         },
         "invierno": {
-            "estilos_dama": ["botín taco cuadrado", "borcego suela gruesa", "bota alta", "mocasin forrado", "chelsea boot"],
-            "estilos_nino": ["bota impermeable", "botín con velcro", "zapatilla caña alta"],
-            "materiales": ["TR antideslizante", "goma vulcanizada", "cuero sintético"],
-            "colores": ["negro", "marrón cuero", "bordeaux", "verde militar", "camel"],
+            "estilos_dama": [
+                "botín taco cuadrado 3-4 cm",
+                "borcego suela gruesa TR",
+                "bota caña alta cuero",
+                "chelsea boot urbano",
+                "mocasín forrado",
+            ],
+            "estilos_nino": [
+                "bota impermeable PVC",
+                "botín bajo con velcro",
+                "zapatilla caña alta abrigo",
+            ],
+            "materiales": ["TR antideslizante", "goma vulcanizada", "cuero sintético", "EVA + TR bicolor"],
+            "colores": ["negro total", "marrón cuero", "bordeaux", "verde militar", "camel"],
             "tendencias_globales": [
                 "Botas altas de caña hasta la rodilla en auge",
                 "Borcegos con suela gruesa estilo work boot",
                 "Tacos cuadrados bajos (3-4cm) muy pedidos",
                 "Puntas cuadradas o levemente almendradas",
-                "Chelsea boots en versión urbana dominan"
+                "Chelsea boots en versión urbana dominan",
+                "Suela track con relieve geométrico profundo",
+            ],
+            "novedades": [
+                "Borcego con suela dentada estilo lug sole",
+                "Bota corta tobillera con cadena metálica",
+                "Suela de goma crepe natural color natural",
             ]
         },
         "otoño": {
-            "estilos_dama": ["botín taco cuadrado", "mocasín plataforma", "loafer grueso", "oxford con suela"],
-            "estilos_nino": ["zapatilla urbana", "botín bajo", "mocasín escolar"],
-            "materiales": ["TR bicolor", "goma natural", "cuero sintético"],
-            "colores": ["camel", "marrón", "verde oliva", "negro", "bordeaux"],
+            "estilos_dama": [
+                "botín taco cuadrado bajo",
+                "mocasín plataforma track",
+                "loafer suela gruesa",
+                "oxford bicolor",
+                "ankle boot destalonado",
+            ],
+            "estilos_nino": [
+                "zapatilla urbana suela alta",
+                "botín bajo escolar",
+                "mocasín clásico",
+            ],
+            "materiales": ["TR bicolor", "goma natural", "cuero sintético grabado"],
+            "colores": ["camel", "marrón tabaco", "verde oliva", "negro", "bordeaux oscuro"],
             "tendencias_globales": [
-                "Mocasines con suela de plataforma muy en tendencia",
-                "Loafers de cuero con suela gruesa",
-                "Transición de sandalia a botín cerrado",
+                "Mocasines con plataforma track muy en tendencia",
+                "Loafers de cuero con suela gruesa estilo 90s",
+                "Transición de sandalia plana a botín bajo",
                 "Suelas de doble densidad populares",
-                "Colores tierra dominan la temporada"
+                "Colores tierra y neutros dominan",
+                "Suela lug o track con relieve profundo",
+            ],
+            "novedades": [
+                "Mocasín con suela track bicolor camel + goma",
+                "Oxford con suela de crepe natural",
+                "Loafer con hebilla metálica y suela plataforma",
             ]
         },
         "primavera": {
-            "estilos_dama": ["mule plano", "sandalia baja", "alpargata plataforma", "mocasín liviano"],
-            "estilos_nino": ["sandalia escolar", "zapatilla liviana", "alpargata niña"],
-            "materiales": ["EVA", "yute", "goma liviana"],
-            "colores": ["blanco", "beige", "lila", "amarillo", "celeste"],
+            "estilos_dama": [
+                "mule plano destalonado",
+                "sandalia baja tira fina",
+                "alpargata plataforma",
+                "mocasín liviano",
+                "ballerina suela flexible",
+            ],
+            "estilos_nino": [
+                "sandalia escolar",
+                "zapatilla liviana lona",
+                "alpargata infantil",
+            ],
+            "materiales": ["EVA liviano", "yute trenzado", "goma liviana", "lona"],
+            "colores": ["blanco", "beige natural", "lila", "amarillo manteca", "celeste"],
             "tendencias_globales": [
                 "Alpargatas y espadrilles vuelven con fuerza",
                 "Mules planos o de taco bajo muy pedidos",
                 "Colores pastel y neutros en auge",
                 "Suela de esparto o yute para looks relajados",
-                "Puntas redondeadas y almendradas"
+                "Puntas redondeadas y almendradas",
+                "Ballerinas con suela fina livianas",
+            ],
+            "novedades": [
+                "Alpargata con suela de plataforma 4cm",
+                "Mule de cuero con suela de goma bicolor",
+                "Ballerina con puntera y suela minimalista",
             ]
         }
     }
-
-    return tendencias_por_temporada.get(temporada, tendencias_por_temporada["otoño"])
+    return datos.get(temporada, datos["otoño"])
 
 
 def obtener_reporte_tendencias():
     """
     Genera el reporte completo de tendencias de calzado.
-
-    Returns:
-        dict con tendencias organizadas por categoría
     """
     temporada = obtener_temporada_actual()
     print(f"Temporada actual: {temporada}")
@@ -165,15 +204,6 @@ def obtener_reporte_tendencias():
         "contexto_moda": {}
     }
 
-    # Obtener tendencias del RSS de Google Argentina
-    print("Obteniendo tendencias de Google Argentina (RSS)...")
-    todas = obtener_tendencias_rss_argentina()
-    print(f"Total tendencias del día: {len(todas)}")
-
-    # Filtrar las relacionadas con calzado
-    calzado = filtrar_tendencias_calzado(todas)
-    print(f"Tendencias de calzado encontradas: {len(calzado)}")
-
     # Cargar contexto de moda por temporada
     contexto = obtener_contexto_moda_temporada(temporada)
     reporte["contexto_moda"] = contexto
@@ -181,8 +211,8 @@ def obtener_reporte_tendencias():
     # Armar tendencias dama
     for est in contexto["estilos_dama"]:
         reporte["tendencias_dama"][est] = {
-            "promedio": 70,
-            "ultimo_valor": 80,
+            "promedio": 72,
+            "ultimo_valor": 85,
             "tendencia": "subiendo"
         }
 
@@ -190,15 +220,21 @@ def obtener_reporte_tendencias():
     for est in contexto["estilos_nino"]:
         reporte["tendencias_nino"][est] = {
             "promedio": 60,
-            "ultimo_valor": 70,
+            "ultimo_valor": 72,
             "tendencia": "subiendo"
         }
 
-    # Emergentes del RSS real
-    if calzado:
-        reporte["emergentes"] = [t["titulo"] for t in calzado[:5]]
+    # Intentar RSS para enriquecer con búsquedas reales
+    print("Intentando obtener RSS de Google Trending Argentina...")
+    rss_items = obtener_tendencias_rss()
+    calzado_real = [t for t in rss_items if any(p in t.lower() for p in TERMINOS_CALZADO)]
+
+    if calzado_real:
+        reporte["emergentes"] = calzado_real[:5]
+        print(f"Tendencias reales de calzado encontradas: {len(calzado_real)}")
     else:
-        reporte["emergentes"] = contexto["tendencias_globales"][:3]
+        reporte["emergentes"] = contexto["novedades"]
+        print("Usando novedades de temporada como emergentes.")
 
     print(f"Tendencias dama: {len(reporte['tendencias_dama'])}")
     print(f"Tendencias niño: {len(reporte['tendencias_nino'])}")
