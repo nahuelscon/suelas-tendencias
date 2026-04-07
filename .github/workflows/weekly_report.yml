@@ -1,0 +1,37 @@
+name: Reporte Semanal de Tendencias
+
+on:
+  # Ejecutar todos los lunes a las 8:00 AM Argentina (11:00 UTC)
+  schedule:
+    - cron: "0 11 * * 1"
+
+  # También permite ejecutarlo manualmente desde GitHub
+  workflow_dispatch:
+
+jobs:
+  generar-reporte:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependencias
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Ejecutar reporte de tendencias
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_DESTINATARIO: ${{ secrets.EMAIL_DESTINATARIO }}
+        run: |
+          cd src
+          python main.py

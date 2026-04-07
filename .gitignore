@@ -1,0 +1,14 @@
+# Variables de entorno (NUNCA subir a GitHub)
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
