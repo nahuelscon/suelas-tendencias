@@ -18,7 +18,7 @@ def ejecutar_reporte():
     print("=" * 50)
 
     # Paso 1: Obtener tendencias de Google Trends
-    print("\n[1/3] Obteniendo tendencias de Google Trends Argentina...")
+    print("\n[1/4] Obteniendo tendencias de Google Trends Argentina...")
     try:
         from trends import obtener_reporte_tendencias
         reporte_tendencias = obtener_reporte_tendencias()
@@ -31,7 +31,7 @@ def ejecutar_reporte():
         sys.exit(1)
 
     # Paso 2: Generar conceptos de suela con IA
-    print("\n[2/3] Generando conceptos de suela con IA...")
+    print("\n[2/4] Generando conceptos de suela con IA...")
     try:
         from ai_analysis import generar_concepto_suela
         conceptos_ia = generar_concepto_suela(reporte_tendencias, reporte_tendencias["temporada"])
@@ -46,8 +46,16 @@ def ejecutar_reporte():
             "calzado niño"
         )
 
-    # Paso 3: Enviar email con el reporte
-    print("\n[3/3] Enviando reporte por email...")
+    # Paso 3: Guardar reporte en Supabase (para la app móvil)
+    print("\n[3/4] Guardando reporte en Supabase...")
+    try:
+        from supabase_sender import guardar_reporte_en_supabase
+        guardar_reporte_en_supabase(reporte_tendencias, conceptos_ia)
+    except Exception as e:
+        print(f"  ⚠️  Error guardando en Supabase (no crítico): {e}")
+
+    # Paso 4: Enviar email con el reporte
+    print("\n[4/4] Enviando reporte por email...")
     try:
         from email_sender import enviar_reporte
         enviar_reporte(reporte_tendencias, conceptos_ia)
